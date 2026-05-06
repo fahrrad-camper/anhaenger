@@ -2,7 +2,7 @@ use crate::{
     adc::BATTERY_VOLTAGE_MV,
     vmon::{OUTPUT_CURRENT_MA, OUTPUT_VOLTAGE_MV},
 };
-use can_messages::{prelude::*, PowerOff, BatteryData, CanId, BITRATE};
+use can_messages::{prelude::*, BatteryData, CanId, PowerOff, BITRATE};
 use core::sync::atomic::Ordering;
 use defmt::info;
 use embassy_executor::task;

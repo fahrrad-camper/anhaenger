@@ -11,16 +11,16 @@ cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-sing
 cortex-m-rt = "0.7.3"
 defmt = "1.0.1"
 defmt-rtt = "1.0.0"
-embassy-embedded-hal = "0.4.0"
-embassy-executor = { version = "0.8.0", features = ["arch-cortex-m", "executor-thread", "nightly"] }
+embassy-embedded-hal = "0.6.0"
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "nightly"] }
 embassy-futures = { version = "0.1.1", features = [] }
-embassy-stm32 = { version = "0.3.0", features = ["memory-x", "stm32f042f6", "time-driver-any", "exti", "unstable-pac"] }
-embassy-sync = { version = "0.7.0", features = [] }
-embassy-time = { version = "0.4.0", features = ["tick-hz-32_768"] }
+embassy-stm32 = { version = "0.6.0", features = ["memory-x", "stm32f042f6", "time-driver-any", "exti", "unstable-pac"] }
+embassy-sync = { version = "0.8.0", features = [] }
+embassy-time = { version = "0.5.1", features = ["tick-hz-32_768"] }
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
 embedded-hal-bus = "0.3.0"
-heapless = { version = "0.8.0", features = ["portable-atomic"] }
+heapless = { version = "0.9.1", features = ["portable-atomic"] }
 ina219 = { version = "0.2.0", features = ["no_transaction"] }
 panic-probe = { version = "1.0.0", features = ["defmt", "defmt-error", "print-defmt"] }
 portable-atomic = { version = "1.10.0", features = ["unsafe-assume-single-core"] }
@@ -28,7 +28,7 @@ portable_atomic_enum = { version = "0.3.1", features = ["portable-atomic"] }
 ssd1306 = { version = "0.10.0", features = ["async"] }
 static_assertions = "1.1.0"
 static_cell = "2.1.0"
-unwrap-infallible = "0.1.5"
+unwrap-infallible = "1.0.0"
 
 [[bin]]
 name = "test-board"

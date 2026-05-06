@@ -31,6 +31,8 @@ pub struct BatteryData {
 #[can_message(CanId::COOLBOX)]
 pub struct CoolBox {
     pub box_temperature_deg10: i16,
+    pub pwm_duty: u8,
+    pub _reserved: u8,
 }
 
 /*

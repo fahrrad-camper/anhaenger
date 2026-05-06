@@ -2,11 +2,10 @@
 
 [package]
 edition = "2021"
-name = "makita-ps"
+name = "pump-controller"
 version = "0.1.0"
 
 [dependencies]
-can-messages = { version = "0.1.0", path = "../can-messages", features = ["stm32f042f6"] }
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.3"
 defmt = "1.0.1"
@@ -14,14 +13,13 @@ defmt-rtt = "1.0.0"
 embassy-embedded-hal = "0.6.0"
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "nightly"] }
 embassy-futures = { version = "0.1.1", features = [] }
-embassy-stm32 = { version = "0.6.0", features = ["memory-x", "stm32f042f6", "time-driver-any", "exti", "unstable-pac"] }
+embassy-stm32 = { version = "0.6.0", features = ["memory-x", "stm32f042f6", "exti", "time-driver-any", "unstable-pac"] }
 embassy-sync = { version = "0.8.0", features = [] }
 embassy-time = { version = "0.5.1", features = ["tick-hz-32_768"] }
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
 embedded-hal-bus = "0.3.0"
-heapless = { version = "0.9.3", features = ["portable-atomic"] }
-ina219 = { version = "0.2.0", features = ["no_transaction"] }
+heapless = { version = "0.9.1", features = ["portable-atomic"] }
 panic-probe = { version = "1.0.0", features = ["defmt", "defmt-error", "print-defmt"] }
 portable-atomic = { version = "1.10.0", features = ["unsafe-assume-single-core"] }
 portable_atomic_enum = { version = "0.3.1", features = ["portable-atomic"] }
@@ -31,6 +29,6 @@ static_cell = "2.1.0"
 unwrap-infallible = "1.0.0"
 
 [[bin]]
-name = "makita-ps"
+name = "pump-controller"
 test = false
 bench = false

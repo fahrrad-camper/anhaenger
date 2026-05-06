@@ -23,7 +23,8 @@ use embassy_stm32::{
     adc::{self as stm32_adc, Adc, AdcChannel},
     bind_interrupts,
     can::{self as stm32_can, Can},
-    exti::ExtiInput,
+    exti::{self, ExtiInput},
+    dma,
     gpio::{Flex, Input, Level, Output, OutputOpenDrain, OutputType, Pull, Speed},
     i2c::{self, I2c, Config as I2cConfig},
     mode::Async,
@@ -47,6 +48,7 @@ bind_interrupts!(struct Irqs {
     ADC1 => stm32_adc::InterruptHandler<peripherals::ADC1>;
     CEC_CAN => stm32_can::Rx0InterruptHandler<peripherals::CAN>, stm32_can::Rx1InterruptHandler<peripherals::CAN>,
                stm32_can::TxInterruptHandler<peripherals::CAN>, stm32_can::SceInterruptHandler<peripherals::CAN>;
+    DMA1_CHANNEL2_3 => dma::InterruptHandler<peripherals::DMA1_CH2>, dma::InterruptHandler<peripherals::DMA1_CH3>;
 });
 
 static PWM_DUTY: AtomicU8 = AtomicU8::new(0);
@@ -79,9 +81,9 @@ async fn main(spawner: Spawner) {
         dev.I2C1,
         scl,
         sda,
-        Irqs,
         dev.DMA1_CH2,
         dev.DMA1_CH3,
+        Irqs,
         {
             let mut cfg = I2cConfig::default();
             cfg.frequency = khz(400);
@@ -102,7 +104,7 @@ async fn main(spawner: Spawner) {
 //    unwrap!(spawner.spawn(temperature_process(i2c)));
 
     let can = Can::new(dev.CAN, dev.PA11, dev.PA12, Irqs);
-    unwrap!(spawner.spawn(can_process(can)));
+    spawner.spawn(can_process(can).unwrap());
 
     let pwm = PwmPin::new(dev.PA7, OutputType::PushPull);
     let pwm = SimplePwm::new(

@@ -16,6 +16,7 @@ use embassy_time::Timer;
 
 const VOLT_FACTOR: u32 = 10;
 const RESOLUTION: Resolution = Resolution::BITS12;
+const SAMPLE_TIME: SampleTime = SampleTime::CYCLES239_5;
 
 pub static CPU_TEMPERATURE: AtomicI16 = AtomicI16::new(0);
 pub static CURRENTS: [AtomicU16; 4] = array![_ => AtomicU16::new(0); 4];
@@ -40,9 +41,9 @@ fn get_ts_cal() -> (i32, i32) {
 /// ADC input pins.
 pub struct AdcReader {
     pub adc: Adc<'static, ADC1>,
-    pub ts: [AnyAdcChannel<ADC1>; 4],
-    pub vsense: AnyAdcChannel<ADC1>,
-    pub isense: AnyAdcChannel<ADC1>,
+    pub ts: [AnyAdcChannel<'static, ADC1>; 4],
+    pub vsense: AnyAdcChannel<'static, ADC1>,
+    pub isense: AnyAdcChannel<'static, ADC1>,
 }
 
 impl AdcReader {
@@ -50,7 +51,6 @@ impl AdcReader {
         let vref_cal = get_vref_cal();
         let (t30_cal, t110_cal) = get_ts_cal();
         self.adc.set_resolution(RESOLUTION);
-        self.adc.set_sample_time(SampleTime::CYCLES239_5);
 
         let reference = self.adc.enable_vref().degrade_adc();
         let tempsensor = self.adc.enable_temperature().degrade_adc();
@@ -59,8 +59,9 @@ impl AdcReader {
 
         let max = resolution_to_max_count(RESOLUTION);
 
+        let [ts0, ts1, ts2, ts3] = self.ts;
         let inputs = [
-            self.ts[0], self.ts[1], self.ts[2], self.ts[3],
+            ts0, ts1, ts2, ts3,
             tempsensor, reference, self.isense, self.vsense,
         ];
 
@@ -77,7 +78,7 @@ impl AdcReader {
 
 pub struct AdcReaderState {
     adc: Adc<'static, ADC1>,
-    inputs: [AnyAdcChannel<ADC1>; 8],
+    inputs: [AnyAdcChannel<'static, ADC1>; 8],
     vref_cal: u32,
     t30_cal: i32,
     t110_cal: i32,
@@ -98,7 +99,7 @@ impl AdcReaderState {
     pub async fn read(&mut self) {
         let mut readings: [u16; 8] = [0; 8];
         for (inp, out) in self.inputs.iter_mut().zip(readings.iter_mut()) {
-            *out = self.adc.read(inp).await;
+            *out = self.adc.read(inp, SAMPLE_TIME).await;
         }
 
         let chip_temperature = readings[Idx::TempSensor as usize];

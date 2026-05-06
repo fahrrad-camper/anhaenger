@@ -1,0 +1,8 @@
+# This file was automatically generated.
+
+[default.general]
+chip = "STM32F042F6Px"
+# connect_under_reset = true
+
+[default.rtt]
+enabled = true
