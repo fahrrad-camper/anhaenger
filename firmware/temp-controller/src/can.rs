@@ -6,6 +6,7 @@ use embassy_futures::join::join;
 use can_messages::{prelude::*, BITRATE, CoolBox};
 use crate::temperature::TEMPERATURE;
 use core::sync::atomic::Ordering;
+use crate::PWM_DUTY;
 
 #[task]
 pub async fn process(mut can: Can<'static>) {
@@ -27,9 +28,12 @@ async fn transmit(mut tx: CanTx<'static>) {
     let mut mailbox = None;
     loop {
         let box_temperature_deg10 = TEMPERATURE.load(Ordering::Relaxed);
+        let pwm_duty = PWM_DUTY.load(Ordering::Relaxed);
 
         let data = CoolBox {
+            pwm_duty,
             box_temperature_deg10,
+            _reserved: 0,
         };
 
         if let Some(frame) = data.try_encode() {
