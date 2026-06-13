@@ -26,7 +26,6 @@ heapless = { version = "0.8.0", features = ["portable-atomic"] }
 libm = "0.2.16"
 num-traits = { version = "0.2.19", default-features = false }
 panic-probe = { version = "1.0.0", features = ["defmt", "defmt-error", "print-defmt"] }
-pid = "4.0.0"
 portable-atomic = { version = "1.10.0", features = ["unsafe-assume-single-core"] }
 portable_atomic_enum = { version = "0.3.1", features = ["portable-atomic"] }
 static_assertions = "1.1.0"

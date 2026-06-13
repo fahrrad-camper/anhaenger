@@ -1,7 +1,10 @@
 use core::sync::atomic::{AtomicI16, AtomicU16, Ordering};
 use defmt::{debug, info};
 use embassy_executor::task;
-use embassy_stm32::{i2c::{I2c, mode::Master}, mode::Async};
+use embassy_stm32::{
+    i2c::{mode::Master, I2c},
+    mode::Async,
+};
 use embassy_time::{Delay, Timer};
 use hdc1080_async::Hdc1080;
 

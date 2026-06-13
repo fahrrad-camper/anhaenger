@@ -1,12 +1,12 @@
-use embassy_stm32::can::{Can, CanRx, CanTx};
-use embassy_executor::task;
-use defmt::{info, Debug2Format};
-use embassy_time::Timer;
-use embassy_futures::join::join;
-use can_messages::{prelude::*, BITRATE, CoolBox};
 use crate::temperature::TEMPERATURE;
-use core::sync::atomic::Ordering;
 use crate::PWM_DUTY;
+use can_messages::{prelude::*, CoolBox, BITRATE};
+use core::sync::atomic::Ordering;
+use defmt::{info, Debug2Format};
+use embassy_executor::task;
+use embassy_futures::join::join;
+use embassy_stm32::can::{Can, CanRx, CanTx};
+use embassy_time::Timer;
 
 #[task]
 pub async fn process(mut can: Can<'static>) {

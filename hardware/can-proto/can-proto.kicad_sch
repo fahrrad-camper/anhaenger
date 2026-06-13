@@ -8743,6 +8743,7 @@
 		)
 		(pin "8"
 			(uuid "7e34d91d-5dc2-4896-9354-d4636ba7201f")
+			(alternate "USART2_TX")
 		)
 		(pin "18"
 			(uuid "9685e86f-e4d5-47c8-9f47-398cf8edfcdf")
@@ -8800,6 +8801,7 @@
 		)
 		(pin "9"
 			(uuid "5eeb899c-8818-47cc-8f1f-bc3ebcb4643c")
+			(alternate "USART2_RX")
 		)
 		(instances
 			(project "can-proto"

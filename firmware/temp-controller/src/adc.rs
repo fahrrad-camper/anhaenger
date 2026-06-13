@@ -1,25 +1,33 @@
 //! ADC driver reading battery voltage and control pin voltage
 
 use array_macro::array;
-use core::{
-    ptr,
-    sync::atomic::{AtomicI16, AtomicU16, Ordering},
-};
+use core::ptr;
 use defmt::{debug, info};
 use embassy_executor::task;
 use embassy_stm32::{
-    adc::{resolution_to_max_count, Adc, AdcChannel, AnyAdcChannel, Resolution, SampleTime, VDDA_CALIB_MV},
+    adc::{
+        resolution_to_max_count, Adc, AdcChannel, AnyAdcChannel, Resolution, SampleTime,
+        VDDA_CALIB_MV,
+    },
     gpio::Output,
     peripherals::ADC1,
 };
 use embassy_time::Timer;
 
-const VOLT_FACTOR: u32 = 10;
+use crate::ntc::{Ntc, NtcReader};
+
+const NTC_SETTINGS: Ntc = Ntc {
+    beta: 3380.0,
+    r0: 10_000.0,
+    t0_deg: 25.0,
+};
+
+const VOLTAGE_FACTOR: u32 = 4;
+const CURRENT_FACTOR_N: u32 = 10;
+const CURRENT_FACTOR_D: u32 = 3;
+
 const RESOLUTION: Resolution = Resolution::BITS12;
 const SAMPLE_TIME: SampleTime = SampleTime::CYCLES239_5;
-
-pub static CPU_TEMPERATURE: AtomicI16 = AtomicI16::new(0);
-pub static CURRENTS: [AtomicU16; 4] = array![_ => AtomicU16::new(0); 4];
 
 fn get_vref_cal() -> u32 {
     unsafe {
@@ -61,11 +69,18 @@ impl AdcReader {
 
         let [ts0, ts1, ts2, ts3] = self.ts;
         let inputs = [
-            ts0, ts1, ts2, ts3,
-            tempsensor, reference, self.isense, self.vsense,
+            ts0,
+            ts1,
+            ts2,
+            ts3,
+            tempsensor,
+            reference,
+            self.isense,
+            self.vsense,
         ];
 
         AdcReaderState {
+            ntc: NTC_SETTINGS.build(RESOLUTION),
             adc: self.adc,
             inputs,
             vref_cal,
@@ -77,12 +92,21 @@ impl AdcReader {
 }
 
 pub struct AdcReaderState {
+    ntc: NtcReader,
     adc: Adc<'static, ADC1>,
     inputs: [AnyAdcChannel<'static, ADC1>; 8],
     vref_cal: u32,
     t30_cal: i32,
     t110_cal: i32,
     max: u32,
+}
+
+#[derive(Debug)]
+pub struct Reading {
+    pub ts: [i32; 4],
+    pub chip_temperature: i32,
+    pub output_current_ma: u16,
+    pub output_voltage_mv: u16,
 }
 
 #[repr(usize)]
@@ -94,9 +118,8 @@ enum Idx {
     VSense = 7,
 }
 
-
 impl AdcReaderState {
-    pub async fn read(&mut self) {
+    pub async fn read(&mut self) -> Reading {
         let mut readings: [u16; 8] = [0; 8];
         for (inp, out) in self.inputs.iter_mut().zip(readings.iter_mut()) {
             *out = self.adc.read(inp, SAMPLE_TIME).await;
@@ -109,15 +132,52 @@ impl AdcReaderState {
         // V_DDA = 3.3 V x VREFINT_CAL / VREFINT_DATA
         let vdda = (self.vref_cal * VDDA_CALIB_MV) / vref as u32;
 
+        let cv = adc_conv::Converter::from_vdda(self, vdda);
+
         // RM0091 13.8 Reading the temperature
         // T = (110 °C - 30 °C) / (TS_CAL2 - TS_CAL1) × (TS_DATA - TS_CAL1) + 30 °C
         let ts = chip_temperature as i32 * 3300 / vdda as i32;
-        let chip_temperature = ((ts - self.t30_cal) * (110 - 30) / (self.t110_cal - self.t30_cal) + 30) as i16;
+        let chip_temperature =
+            ((ts - self.t30_cal) * (110 - 30) / (self.t110_cal - self.t30_cal) + 30) * 1000;
 
-        let ts = readings[Idx::Ts as usize .. Idx::Ts as usize + 4].iter().map(|ts| {
-        });
-        //let sense_voltage_mv = (voltage as u32 * vdda / max * VOLT_FACTOR) as u16;
-        //let current_ma = sense_voltage_mv * 2;
+        let ts: [u16; 4] = readings[Idx::Ts as usize..Idx::Ts as usize + 4]
+            .try_into()
+            .unwrap();
+        let ts = ts.map(|ts| self.ntc.from_adc(ts));
 
+        let isense = readings[Idx::ISense as usize];
+        let vsense = readings[Idx::VSense as usize];
+
+        let output_current_ma =
+            cv.convert_reading(isense, CURRENT_FACTOR_N, CURRENT_FACTOR_D) as u16;
+        let output_voltage_mv = cv.convert_reading(vsense, VOLTAGE_FACTOR, 1) as u16;
+
+        Reading {
+            ts,
+            chip_temperature,
+            output_voltage_mv,
+            output_current_ma,
+        }
+    }
+}
+
+mod adc_conv {
+    use super::AdcReaderState;
+
+    pub struct Converter<'t> {
+        state: &'t AdcReaderState,
+        vdda: u32,
+    }
+
+    impl<'t> Converter<'t> {
+        #[inline]
+        pub fn from_vdda(state: &'t AdcReaderState, vdda: u32) -> Self {
+            Self { state, vdda }
+        }
+
+        #[inline]
+        pub fn convert_reading(&self, reading: u16, nominator: u32, denominator: u32) -> u32 {
+            reading as u32 * self.vdda / self.state.max * nominator / denominator
+        }
     }
 }

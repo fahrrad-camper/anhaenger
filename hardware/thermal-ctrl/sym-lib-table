@@ -1,0 +1,5 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "AOZ")(type "KiCad")(uri "${KIPRJMOD}/AOZ.kicad_sym")(options "")(descr ""))
+  (lib (name "VNQ")(type "KiCad")(uri "${KIPRJMOD}/VNQ.kicad_sym")(options "")(descr ""))
+)

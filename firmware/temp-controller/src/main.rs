@@ -3,32 +3,43 @@
 #![no_main]
 
 mod adc;
-mod ntc;
-mod temperature;
 mod can;
+mod ntc;
+mod pwm;
+mod tbh;
+mod temperature;
+mod traits;
+
+mod power_regulator;
 
 use {defmt_rtt as _, panic_probe as _};
 
-use crate::{adc::AdcReader, temperature::process as temperature_process, can::process as can_process};
+use crate::{
+    adc::AdcReader, can::process as can_process, pwm::Pwm,
+    temperature::process as temperature_process,
+    tbh::Tbh,
+    power_regulator::PowerRegulator,
+    traits::{AsInput, Regulator},
+};
+
 use core::{
     cell::RefCell,
     sync::atomic::{AtomicBool, AtomicU8, Ordering},
 };
-use defmt::{info, unwrap};
+use defmt::{info, unwrap, Debug2Format};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::{main, task, Spawner};
-use embassy_futures::select::select;
+use embassy_futures::{yield_now, select::select};
 use embassy_stm32::{
-    pac,
     adc::{self as stm32_adc, Adc, AdcChannel},
     bind_interrupts,
     can::{self as stm32_can, Can},
-    exti::{self, ExtiInput},
     dma,
+    exti::{self, ExtiInput},
     gpio::{Flex, Input, Level, Output, OutputOpenDrain, OutputType, Pull, Speed},
-    i2c::{self, I2c, Config as I2cConfig},
+    i2c::{self, Config as I2cConfig, I2c},
     mode::Async,
-    peripherals,
+    pac, peripherals,
     time::{khz, mhz},
     timer::{
         low_level::{CountingMode, OutputPolarity},
@@ -38,9 +49,7 @@ use embassy_stm32::{
     Config as DeviceConfig,
 };
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
-use embassy_time::Timer;
-use num_traits::float::FloatCore;
-use pid::Pid;
+use embassy_time::{Instant, Timer};
 use static_cell::StaticCell;
 
 bind_interrupts!(struct Irqs {
@@ -69,6 +78,7 @@ async fn main(spawner: Spawner) {
         config.rcc.sys = Sysclk::PLL1_P;
         config.rcc.ahb_pre = AHBPrescaler::DIV1;
         config.rcc.apb1_pre = APBPrescaler::DIV1;
+        config.enable_debug_during_sleep = true;
     }
     let dev = embassy_stm32::init(config);
 
@@ -77,34 +87,30 @@ async fn main(spawner: Spawner) {
 
     let sda = dev.PF0;
     let scl = dev.PF1;
-    let i2c = I2c::new(
-        dev.I2C1,
-        scl,
-        sda,
-        dev.DMA1_CH2,
-        dev.DMA1_CH3,
-        Irqs,
-        {
-            let mut cfg = I2cConfig::default();
-            cfg.frequency = khz(400);
-            cfg
-        },
-    );
-
+    let i2c = I2c::new(dev.I2C1, scl, sda, dev.DMA1_CH2, dev.DMA1_CH3, Irqs, {
+        let mut cfg = I2cConfig::default();
+        cfg.frequency = khz(400);
+        cfg
+    });
 
     let adc = Adc::new(dev.ADC1, Irqs);
     let adc = AdcReader {
         adc,
-        ts: [dev.PA0.degrade_adc(), dev.PA1.degrade_adc(), dev.PA2.degrade_adc(), dev.PA3.degrade_adc()],
+        ts: [
+            dev.PA0.degrade_adc(),
+            dev.PA1.degrade_adc(),
+            dev.PA2.degrade_adc(),
+            dev.PA3.degrade_adc(),
+        ],
         vsense: dev.PA5.degrade_adc(),
         isense: dev.PA4.degrade_adc(),
     };
-    let adc = adc.init();
+    let mut adc = adc.init();
 
-//    unwrap!(spawner.spawn(temperature_process(i2c)));
+    //    unwrap!(spawner.spawn(temperature_process(i2c)));
 
     let can = Can::new(dev.CAN, dev.PA11, dev.PA12, Irqs);
-    spawner.spawn(can_process(can).unwrap());
+    //spawner.spawn(can_process(can).unwrap());
 
     let pwm = PwmPin::new(dev.PA7, OutputType::PushPull);
     let pwm = SimplePwm::new(
@@ -121,28 +127,46 @@ async fn main(spawner: Spawner) {
     pwm.set_duty_cycle_fully_off();
     pwm.enable();
 
-    let mut drv_en = Output::new(dev.PB8, Level::Low, Speed::Low);
+    let drv_en = Output::new(dev.PB8, Level::Low, Speed::Low);
+
+    let pwm = Pwm::new(pwm, drv_en, 0.1);
 
     let mut led = OutputOpenDrain::new(dev.PA6, Level::High, Speed::Low);
 
-  //  let mut pid = Pid::<f32>::new(15.0, 100.0);
-  //  pid.p(10.0, 100.0).i(0.1, 50.0).d(0.1, 10.0);
+    let power_regulator = PowerRegulator::new(pwm);
+    let mut temperature_regulator = Tbh::new(0.0005, power_regulator, 10.0);
 
-    drv_en.set_high();
     loop {
-        Timer::after_millis(100).await;
-        led.set_high();
-        Timer::after_millis(100).await;
-        led.set_low();
-        pwm.set_duty_cycle_fraction(1, 20);
-/*        let t = temperature::TEMPERATURE.load(Ordering::Relaxed) as f32 / 10.0;
-        let v = pid.next_control_output(t);
+        led.toggle();
+        let t = Instant::now();
+        let reading = adc.read().await;
+        let temperature = reading.ts[0] as f32 / 1_000.0;
+        info!("T = {}", temperature);
+        let power = reading.output_current_ma as f32 * reading.output_voltage_mv as f32 / 1_000_000.0;
+        let input = Inputs {
+            power,
+            temperature,
+        };
+        temperature_regulator.regulate(t, &input, 45.0);
+        Timer::after_millis(200).await;
+    }
+}
 
-        let duty = (-v.output).clamp(0.0, 100.0);
-        PWM_DUTY.store(duty.round() as u8, Ordering::Relaxed);
-        info!("PWM duty {}", duty);
+struct Inputs {
+    power: f32,
+    temperature: f32,
+}
 
-        pwm.ch1
-            .set_duty_cycle_fraction((duty * 100.0).round() as u16, 10000);*/
+impl<T> AsInput<PowerRegulator<T>> for Inputs {
+    type Value = f32;
+    fn as_input(&self) -> Self::Value {
+        self.power
+    }
+}
+
+impl<T> AsInput<Tbh<T>> for Inputs {
+    type Value = f32;
+    fn as_input(&self) -> Self::Value {
+        self.temperature
     }
 }

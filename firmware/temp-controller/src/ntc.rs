@@ -1,12 +1,12 @@
 use az::SaturatingCast;
-use embassy_stm32::adc::{Resolution, resolution_to_max_count};
+use embassy_stm32::adc::{resolution_to_max_count, Resolution};
 use libm::logf;
 use num_traits::float::FloatCore;
 
 const R_REF: f32 = 10_000.0;
 const KELVIN: f32 = 273.15;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ntc {
     pub beta: f32,
     pub t0_deg: f32,
@@ -27,21 +27,23 @@ impl Ntc {
 pub struct NtcReader {
     beta: f32,
     rev_t0: f32, // 1/T0
-    r_fac: f32, // = R_REF/R0
+    r_fac: f32,  // = R_REF/R0
     max: f32,
 }
 
 impl NtcReader {
     /// Convert raw ADC reading into temperature in 1/1000 °C.
-    pub fn from_adc(&self, reading: u16) -> i16 {
+    pub fn from_adc(&self, reading: u16) -> i32 {
         let ratio = self.max / reading as f32;
-        (self.ratio2temperature(ratio) * 1000.0).round().saturating_cast()
+        (self.ratio2temperature(ratio) * 1000.0)
+            .round()
+            .saturating_cast()
     }
 
     #[inline]
     fn ratio2temperature(&self, reading_rel_rev: f32) -> f32 {
-        let r_fac = self.r_fac / ((self.r_fac + 1.0) * reading_rel_rev - 1.0);
+        let r_fac = self.r_fac / (reading_rel_rev - 1.0);
         let rev_t = self.rev_t0 + logf(r_fac) / self.beta;
-        (1.0 / rev_t) - KELVIN
+        (1.0 / rev_t).max(0.0) - KELVIN
     }
 }
